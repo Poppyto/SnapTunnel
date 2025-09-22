@@ -306,7 +306,8 @@ namespace SnapTunnel.Services
 
             var httpVersionAndStatus = $"""
 HTTP/1.1 200 OK
-Server: SnapTunnel
+Server: SnapTunnel/1.0
+Date: {DateTime.UtcNow:R}
 Content-Type: {contentType}
 Content-Length: {fileInfo.Length}
 
