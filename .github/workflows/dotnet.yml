@@ -43,19 +43,11 @@ jobs:
         git tag v${{ github.run_number }}
         git push origin v${{ github.run_number }}
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.run_number }}
-        release_name: Release v${{ github.run_number }}
+        name: Release v${{ github.run_number }}
+        files: app.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./app.zip
-        asset_name: app.zip
-        asset_content_type: application/zip
