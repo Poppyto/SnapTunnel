@@ -1,0 +1,249 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SnapTunnel.Configurations;
+using SnapTunnel.Interfaces;
+using SnapTunnel.Models;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
+
+namespace SnapTunnel.Services
+{
+    public partial class ApplicationService : IApplicationService
+    {
+        const string CertificateSubjectRoot = "SnapTunnel Secure Certificate Authority";
+        const string CertificateSubjectDomain = "SnapTunnel Wildcard Domain Secure Certificate Authority";
+
+        private readonly ILogger<ApplicationService> _logger;
+        private readonly ICertificateService _certificateService;
+        private readonly IConfiguration _configuration;
+        private readonly ITunnelService _tunnelService;
+        private readonly IEtcHostService _etcHostService;
+        private readonly IOptions<TunnelsConfiguration> _tunnelsConfiguration;
+
+        public ApplicationService(ICertificateService certificateService, ILogger<ApplicationService> logger, IConfiguration configuration, IEtcHostService etcHostService, ITunnelService tunnelService, IOptions<TunnelsConfiguration> tunnelsConfiguration)
+        {
+            _certificateService = certificateService;
+            _logger = logger;
+            _configuration = configuration;
+            _etcHostService = etcHostService;
+            _tunnelService = tunnelService;
+            _tunnelsConfiguration = tunnelsConfiguration;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("Start Application");
+
+            StoreLocation storeLocation = StoreLocation.CurrentUser;
+
+            if (!GetOrCreateRootCertificate(storeLocation, CertificateSubjectRoot, out var rootCert))
+            {
+                return;
+            }
+
+            var tunnels = _configuration.GetSection("tunnel").Get<string[]>() ?? Array.Empty<string>();
+
+            var tunnelHosts = ParseConfiguration(tunnels).ToArray();
+
+            var domainsSource = tunnelHosts.Select(t => t.DomainSource).Distinct(StringComparer.OrdinalIgnoreCase);
+
+            if (!GetOrCreateSignedCertificate(storeLocation, rootCert, CertificateSubjectDomain, domainsSource, out var certificateDomains))
+            {
+                return;
+            }
+
+            foreach (var tunnelHost in tunnelHosts)
+            {
+                _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                var ipHostEntry = await Dns.GetHostEntryAsync(tunnelHost.DomainDestination);
+                tunnelHost.IpDestination = ipHostEntry;
+
+                if (!_etcHostService.AddOrUpdateHostEntry("127.0.0.1", tunnelHost.DomainSource))
+                {
+                    _logger.LogError("Failed to add or update hosts file entry.");
+                    return;
+                }
+            }
+
+            ValidatePorts(tunnelHosts);
+
+            _logger.LogInformation("Let's Start Tunnels");
+
+            var taskTunnels = new List<Task>();
+            foreach (var portSource in tunnelHosts.Select(a => a.PortSource).Distinct())
+            {
+                var createTunnelHostModel = new CreateTunnelHostModel
+                {
+                    ServerAddress = IPAddress.Any,
+                    ServerPort = portSource,
+                    UseHttps = tunnelHosts.Any(t => t.PortSource == portSource && t.UseHttpsSource),
+                    CertificateDomains = certificateDomains!,
+                    TunnelsConfiguration = tunnelHosts.Where(t => t.PortSource == portSource)
+                };
+
+                var taskTunnel = _tunnelService.StartTunnelAsync(createTunnelHostModel, cancellationToken);
+                taskTunnels.Add(taskTunnel);
+            }
+
+            await Task.WhenAll(taskTunnels);
+        }
+
+        private void ValidatePorts(TunnelConfiguration[] tunnelHosts)
+        {
+            var differentSchemesSamePort = tunnelHosts.GroupBy(a => a.PortSource)
+                       .Where(a =>
+                            a.Select(b => b.UseHttpsDestination).Count() > 1
+                            );
+
+            if(differentSchemesSamePort.Any())
+            {
+                foreach (var group in differentSchemesSamePort)
+                {
+                    _logger.LogError("Port {Port} is used with different schemes: http & https", group.Key);
+                }
+                
+                throw new InvalidOperationException("Ports are used with different schemes.");
+            }
+        }
+
+        private IEnumerable<TunnelConfiguration> ParseConfiguration(string[] tunnels)
+        {
+            foreach (var tunnel in tunnels)
+            {
+                yield return ParseTunnel(tunnel);
+            }
+        }
+
+        private TunnelConfiguration ParseTunnel(string tunnelStr)
+        {
+            var parts = tunnelStr.Split('|', StringSplitOptions.RemoveEmptyEntries);
+            var core = parts[0].Trim();
+
+            // src>dest
+            var sides = core.Split('>');
+            if (sides.Length != 2)
+                throw new FormatException("Invalid tunnel, src>dst expected.");
+
+            var srcParts = sides[0].Split(':');
+            var dstParts = sides[1].Split(':');
+
+            if (!(srcParts[0] is "http" or "https"))
+                throw new FormatException("Invalid source scheme, could only be http or https");
+
+            if (!(dstParts[0] is "http" or "https"))
+                throw new FormatException("Invalid dest scheme, could only be http or https");
+
+            var tunnel = new TunnelConfiguration
+            {
+                UseHttpsSource = srcParts[0].Equals("https", StringComparison.OrdinalIgnoreCase),
+                DomainSource = srcParts[1],
+                PortSource = int.Parse(srcParts[2]),
+                UseHttpsDestination = dstParts[0].Equals("https", StringComparison.OrdinalIgnoreCase),
+                DomainDestination = dstParts[1],
+                PortDestination = int.Parse(dstParts[2]),
+            };
+
+            // options
+            foreach (var opt in parts.Skip(1))
+            {
+                var kv = opt.Split('=', 2);
+                if (kv.Length != 2) continue;
+                var key = kv[0].Trim().ToLower();
+                var val = kv[1].Trim();
+
+                switch (key)
+                {
+                    case "rewritepath":
+                        {
+                            var rr = val.Split(">", 2);
+                            if (rr.Length != 2)
+                                throw new FormatException($"Rewrite invalide: {val}, attendu pattern=>remplacement");
+
+                            tunnel.PathReplaces.Add(new PathReplaceConfiguration
+                            {
+                                PathRegexMatch = new Regex(rr[0], RegexOptions.Compiled),
+                                PathRegexReplace = rr[1]
+                            });
+                        }
+                        break;
+
+                    case "overwrite":
+                        {
+                            var sep = val.IndexOf('>');
+                            if (sep > 0)
+                                tunnel.OverrideContents[val[..sep]] = val[(sep + 1)..];
+                        }
+                        break;
+                }
+            }
+
+            return tunnel;
+        }
+
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("Stop Application");
+
+            var tunnelHosts = _tunnelsConfiguration.Value.Tunnels;
+
+            _logger.LogInformation("Unregistering domains in etc/hosts");
+
+            foreach (var tunnelHost in tunnelHosts)
+            {
+                _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+            }
+        }
+
+        private bool GetOrCreateRootCertificate(StoreLocation storeLocation, string subject, out X509Certificate2? cert)
+        {
+            var storeName = StoreName.Root;
+
+            if (!_certificateService.IsCertificateInstalled(subject, storeName, storeLocation))
+            {
+                cert = _certificateService.CreateRootCertificate(subject);
+
+                if (!_certificateService.InstallCertificate(cert, storeName, storeLocation))
+                {
+                    _logger.LogError("Failed to install the certificate.");
+                    return false;
+                }
+
+                _logger.LogInformation("certificate created and installed in the Store.");
+            }
+            else
+            {
+                _logger.LogInformation("certificate already present in the Store.");
+
+                cert = _certificateService.GetCertificate(subject, storeName, storeLocation);
+            }
+
+            return true;
+        }
+
+        private bool GetOrCreateSignedCertificate(StoreLocation storeLocation, X509Certificate2? rootCert, string certname, IEnumerable<string> domains, out X509Certificate2? cert)
+        {
+            cert = null;
+            bool isRoot = rootCert == null;
+
+            var storeName = StoreName.My;
+
+            if (!_certificateService.IsCertificateInstalled(certname, storeName, storeLocation))
+            {
+                cert = _certificateService.CreateSignedCertificate(rootCert, certname, domains);
+
+                _logger.LogInformation("certificate created and installed in the Store.");
+            }
+            else
+            {
+                _logger.LogInformation("certificate already present in the Store.");
+
+                cert = _certificateService.GetCertificate(certname, storeName, storeLocation);
+            }
+
+
+            return true;
+        }
+    }
+}

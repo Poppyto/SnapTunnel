@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FlipperProxy": {
+      "commandName": "Project",
+      "commandLineArgs": "--tunnel:0 \"https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443|overwrite=/v1/models/Qwen3-32B>Prompts/model.Qwen3-32B.json|overwrite=/v1/models//Qwen3-32B>Prompts/model.Qwen3-32B.json\""
+    }
+  }
+}
