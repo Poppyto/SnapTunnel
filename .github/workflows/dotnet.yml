@@ -29,6 +29,13 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
 
+    - name: Create tag
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag v${{ github.run_number }}
+        git push origin v${{ github.run_number }}
+        
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
