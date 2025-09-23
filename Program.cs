@@ -1,11 +1,14 @@
-﻿using SnapTunnel.Configurations;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Options;
+using SnapTunnel.Configurations;
 using SnapTunnel.Interfaces;
 using SnapTunnel.Services;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime;
+using System;
+using System.CommandLine;
+using System.CommandLine.Help;
 
 namespace SnapTunnel
 {
@@ -13,37 +16,121 @@ namespace SnapTunnel
     {
         static async Task Main(string[] args)
         {
-            var switchMappings = new Dictionary<string, string>()
-            {
-                { "-t", "tunnel" },
-                { "--tunnel", "tunnel" },
-                { "-v", "verbose" },
-                { "--verbose", "verbose" },
-            };
 
             var builder = Host.CreateApplicationBuilder(args);
+
+            if (!AddCommandLine(builder, args))
+            {
+                return;
+            }
+
             builder.Services.AddScoped<ICertificateService, CertificateService>();
             builder.Services.AddScoped<ITunnelService, TunnelService>();
             builder.Services.AddScoped<IEtcHostService, EtcHostService>();
             builder.Services.AddScoped<IHttpProtocolService, HttpProtocolService>();
 
-            builder.Configuration.AddCommandLine(args, switchMappings);
-
-            // Options / AOT compatible
-            AddConfigurations(builder);
 
             builder.Services.AddHostedService<ApplicationService>();
             var host = builder.Build();
 
-
             await host.RunAsync();
         }
 
-        //AOT compatibility
-        [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(TunnelsConfiguration))]
-        private static void AddConfigurations(HostApplicationBuilder builder)
+        /// <summary>
+        /// The whole CLI args
+        /// </summary>
+        /// <param name="builder"></param>
+        /// <param name="args"></param>
+        private static bool AddCommandLine(HostApplicationBuilder builder, string[] args)
         {
-            builder.Services.Configure<TunnelsConfiguration>(builder.Configuration.GetSection(TunnelsConfiguration.SectionName));
+            var verbosityOption = new Option<int?>("-v", "--verbosity")
+            {
+                Description = $"Log verbosity ({string.Join(", ", Enum.GetValues<LogLevel>().Select((a => $"{(int)a}: {a}")))})",
+                HelpName = "0-6",
+                Required = false,
+            };
+
+            var installRootCertOption = new Option<bool>("-i", "--installrootcert")
+            {
+                Description = "Install the root certificate in the current user trusted root certificate authorities (CAs)",
+                Required = false,
+            };
+
+            var uninstallRootCertOption = new Option<bool>("-u", "--uninstallrootcert")
+            {
+                Description = "Uninstall the root certificate from the current user trusted root certificate authorities (CAs)",
+                Required = false,
+            };
+
+            var tunnelsOption = new Option<List<TunnelConfiguration>>("-t", "--tunnel")
+            {
+                Description = "Create a tunnel",
+                HelpName = "[http|https]:source_host:port>[http|https]:destination_host:port[|rewritepath:/(.*)>/api/openai_compat/$1|overwrite:/index.html>c:/file/index.html]",
+                CustomParser = result =>
+                {
+                    var listTunnelsConfiguration = new List<TunnelConfiguration>();
+                    foreach (var token in result.Tokens)
+                    {
+                        try
+                        {
+                            listTunnelsConfiguration.Add(TunnelConfiguration.Parse(token.Value)); // to avoid null if no value
+                        }
+                        catch (Exception ex)
+                        {
+                            result.AddError(ex.Message);
+                        }
+                    }
+                    return listTunnelsConfiguration;
+                },
+                AllowMultipleArgumentsPerToken = true,
+                Required = false,
+            };
+
+            RootCommand rootCommand = new("SnapTunnel - Still Not A Proxy, but a tunnel");
+            rootCommand.Options.Add(verbosityOption);
+            rootCommand.Options.Add(installRootCertOption);
+            rootCommand.Options.Add(uninstallRootCertOption);
+            rootCommand.Options.Add(tunnelsOption);
+
+            rootCommand.SetAction(parseResult =>
+            {
+                var isInstallCertificate = parseResult.GetValue(installRootCertOption);
+                var isUninstallCertificate = parseResult.GetValue(uninstallRootCertOption);
+                var tunnelsConfigurations = parseResult.GetValue(tunnelsOption);
+                var verbosity = parseResult.GetValue(verbosityOption);
+
+                if (verbosity.HasValue)
+                {
+                    var minimumLogLevel = (LogLevel)verbosity.Value;
+
+                    builder.Logging.ClearProviders();
+                    // careful, appsettings.json could override this
+                    builder.Logging.SetMinimumLevel(minimumLogLevel);
+                }
+
+                builder.Services.Configure<TunnelsConfiguration>(options =>
+                {
+                    options.IsInstallCertificate = isInstallCertificate;
+                    options.IsUninstallCertificate = isUninstallCertificate;
+                    options.Tunnels = tunnelsConfigurations;
+                });
+
+                return 0;
+            });
+
+            ParseResult parseResult = rootCommand.Parse(args);
+
+            // Help -h
+            if (parseResult.Action is HelpAction)
+            {
+                return true;
+            }
+
+            return !parseResult.Errors.Any();
         }
+
+
+        
+
     }
 }

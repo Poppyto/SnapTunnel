@@ -35,7 +35,7 @@ jobs:
       #run: dotnet publish -c Release -o publish
 
     - name: Archive release
-      run: 7z a app.zip ./publish/*
+      run: 7z a snaptunnel-{{ github.run_number }}.zip ./publish/*
 
     - name: Create tag
       run: |
@@ -49,6 +49,6 @@ jobs:
       with:
         tag_name: v${{ github.run_number }}
         name: Release v${{ github.run_number }}
-        files: app.zip
+        files: snaptunnel-{{ github.run_number }}.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

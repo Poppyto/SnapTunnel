@@ -134,6 +134,23 @@ namespace SnapTunnel.Services
             return true;
         }
 
+        public bool UninstallCertificate(X509Certificate2 certificate, StoreName storeName = StoreName.Root, StoreLocation storeLocation = StoreLocation.CurrentUser)
+        {
+            try
+            {
+                using var store = new X509Store(storeName, storeLocation);
+                store.Open(OpenFlags.ReadWrite);
+                store.Remove(certificate);
+                store.Close();
+            }
+            catch (CryptographicException ex) when (ex.HResult == -2147023673) //cancelled operation
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         public bool IsCertificateInstalled(string subjectName, StoreName storeName = StoreName.Root, StoreLocation storeLocation = StoreLocation.CurrentUser)
         {
             using var store = new X509Store(storeName, storeLocation);

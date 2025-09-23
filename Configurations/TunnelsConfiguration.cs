@@ -10,6 +10,8 @@ namespace SnapTunnel.Configurations
     {
         public const string SectionName = "TunnelsConfiguration";
 
-        public List<TunnelConfiguration> Tunnels { get; set; } = new();
+        public bool IsInstallCertificate { get; set; }
+        public bool IsUninstallCertificate { get; set; }
+        public IEnumerable<TunnelConfiguration> Tunnels { get; set; }
     }
 }
