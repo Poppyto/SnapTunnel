@@ -1,21 +1,13 @@
+using Microsoft.Extensions.Logging;
 using SnapTunnel.Configurations;
 using SnapTunnel.Interfaces;
 using SnapTunnel.Models;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using System;
 using System.Buffers;
-using System.IO;
-using System.Linq;
-using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace SnapTunnel.Services
 {
@@ -194,7 +186,7 @@ namespace SnapTunnel.Services
 
                     input.Headers = headers;
 
-                    _logger.LogInformation("OUTPUT:{data}", Encoding.UTF8.GetString(buffer, 0, totalBytesRead));
+                    _logger.LogDebug("{data}", Encoding.UTF8.GetString(buffer, 0, totalBytesRead));
 
                     var tunnelConfiguration = tunnelsConfiguration.FirstOrDefault(a => string.Equals(a.DomainSource, headerHost.Value, StringComparison.OrdinalIgnoreCase));
 
@@ -341,11 +333,17 @@ Content-Length: {fileInfo.Length}
                         break;
                     }
 
-                    if (0 == await input.Stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken))
+                    var bytesRead = await input.Stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+
+                    if (bytesRead == 0)
                     {
                         _logger.LogWarning("Stream ended before zero-length chunk was found.");
                         break;
                     }
+
+                    _logger.LogDebug("{data}", Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                    await outputTunnel.Stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                    await outputTunnel.Stream.FlushAsync(cancellationToken);
 
                     totalBytesRead = buffer.Length;
                 }
@@ -375,6 +373,8 @@ Content-Length: {fileInfo.Length}
                     }
                     remainingBytesToRead -= bytesRead;
                     totalBytesRead += bytesRead;
+
+                    _logger.LogDebug("{data}", Encoding.UTF8.GetString(buffer, 0, bytesRead));
                     await outputTunnel.Stream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                     await outputTunnel.Stream.FlushAsync(cancellationToken);
                 }
@@ -403,7 +403,7 @@ Content-Length: {fileInfo.Length}
                 while ((bytesRead = await input.Stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
                 {
                     var strData = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                    _logger.LogInformation("OUTPUT:{data}", strData);
+                    _logger.LogInformation("{data}", strData);
                     await output.Stream.WriteAsync(buffer.AsMemory(0, bytesRead));
                     await output.Stream.FlushAsync();
                 }
