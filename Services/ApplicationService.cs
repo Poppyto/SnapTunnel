@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SnapTunnel.Configurations;
 using SnapTunnel.Interfaces;
 using SnapTunnel.Models;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
@@ -17,19 +19,19 @@ namespace SnapTunnel.Services
 
         private readonly ILogger<ApplicationService> _logger;
         private readonly ICertificateService _certificateService;
-        private readonly IConfiguration _configuration;
         private readonly ITunnelService _tunnelService;
         private readonly IEtcHostService _etcHostService;
         private readonly IOptions<TunnelsConfiguration> _tunnelsConfiguration;
+        private readonly IHostApplicationLifetime _hostApplicationLifetime;
 
-        public ApplicationService(ICertificateService certificateService, ILogger<ApplicationService> logger, IConfiguration configuration, IEtcHostService etcHostService, ITunnelService tunnelService, IOptions<TunnelsConfiguration> tunnelsConfiguration)
+        public ApplicationService(ICertificateService certificateService, ILogger<ApplicationService> logger, IEtcHostService etcHostService, ITunnelService tunnelService, IOptions<TunnelsConfiguration> tunnelsConfiguration, IHostApplicationLifetime hostApplicationLifetime)
         {
             _certificateService = certificateService;
             _logger = logger;
-            _configuration = configuration;
             _etcHostService = etcHostService;
             _tunnelService = tunnelService;
             _tunnelsConfiguration = tunnelsConfiguration;
+            _hostApplicationLifetime = hostApplicationLifetime;
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -38,19 +40,42 @@ namespace SnapTunnel.Services
 
             StoreLocation storeLocation = StoreLocation.CurrentUser;
 
-            if (!GetOrCreateRootCertificate(storeLocation, CertificateSubjectRoot, out var rootCert))
+            var tunnelsConfiguration = _tunnelsConfiguration.Value;
+            if(tunnelsConfiguration == null)
             {
+                _hostApplicationLifetime.StopApplication();
                 return;
             }
 
-            var tunnels = _configuration.GetSection("tunnel").Get<string[]>() ?? Array.Empty<string>();
+            var isInstallRootCert = tunnelsConfiguration.IsInstallCertificate;
+            var isUninstallRootCert = tunnelsConfiguration.IsUninstallCertificate;
 
-            var tunnelHosts = ParseConfiguration(tunnels).ToArray();
+            if (isUninstallRootCert && !RemoveRootCertificate(storeLocation, CertificateSubjectRoot))
+            {
+                _hostApplicationLifetime.StopApplication();
+                return;
+            }
+
+            X509Certificate2? rootCert = null;
+            if (isInstallRootCert && !GetOrCreateRootCertificate(storeLocation, CertificateSubjectRoot, out rootCert))
+            {
+                _hostApplicationLifetime.StopApplication();
+                return;
+            }
+
+            var tunnelHosts = _tunnelsConfiguration.Value.Tunnels;
+
+            if(tunnelHosts == null || !tunnelHosts.Any())
+            {
+                _hostApplicationLifetime.StopApplication();
+                return;
+            }
 
             var domainsSource = tunnelHosts.Select(t => t.DomainSource).Distinct(StringComparer.OrdinalIgnoreCase);
 
             if (!GetOrCreateSignedCertificate(storeLocation, rootCert, CertificateSubjectDomain, domainsSource, out var certificateDomains))
             {
+                _hostApplicationLifetime.StopApplication();
                 return;
             }
 
@@ -63,6 +88,8 @@ namespace SnapTunnel.Services
                 if (!_etcHostService.AddOrUpdateHostEntry("127.0.0.1", tunnelHost.DomainSource))
                 {
                     _logger.LogError("Failed to add or update hosts file entry.");
+
+                    _hostApplicationLifetime.StopApplication();
                     return;
                 }
             }
@@ -90,96 +117,22 @@ namespace SnapTunnel.Services
             await Task.WhenAll(taskTunnels);
         }
 
-        private void ValidatePorts(TunnelConfiguration[] tunnelHosts)
+        private void ValidatePorts(IEnumerable<TunnelConfiguration> tunnelHosts)
         {
             var differentSchemesSamePort = tunnelHosts.GroupBy(a => a.PortSource)
                        .Where(a =>
-                            a.Select(b => b.UseHttpsDestination).Count() > 1
+                            a.GroupBy(b => b.UseHttpsDestination).Count() > 1
                             );
 
-            if(differentSchemesSamePort.Any())
+            if (differentSchemesSamePort.Any())
             {
                 foreach (var group in differentSchemesSamePort)
                 {
                     _logger.LogError("Port {Port} is used with different schemes: http & https", group.Key);
                 }
-                
+
                 throw new InvalidOperationException("Ports are used with different schemes.");
             }
-        }
-
-        private IEnumerable<TunnelConfiguration> ParseConfiguration(string[] tunnels)
-        {
-            foreach (var tunnel in tunnels)
-            {
-                yield return ParseTunnel(tunnel);
-            }
-        }
-
-        private TunnelConfiguration ParseTunnel(string tunnelStr)
-        {
-            var parts = tunnelStr.Split('|', StringSplitOptions.RemoveEmptyEntries);
-            var core = parts[0].Trim();
-
-            // src>dest
-            var sides = core.Split('>');
-            if (sides.Length != 2)
-                throw new FormatException("Invalid tunnel, src>dst expected.");
-
-            var srcParts = sides[0].Split(':');
-            var dstParts = sides[1].Split(':');
-
-            if (!(srcParts[0] is "http" or "https"))
-                throw new FormatException("Invalid source scheme, could only be http or https");
-
-            if (!(dstParts[0] is "http" or "https"))
-                throw new FormatException("Invalid dest scheme, could only be http or https");
-
-            var tunnel = new TunnelConfiguration
-            {
-                UseHttpsSource = srcParts[0].Equals("https", StringComparison.OrdinalIgnoreCase),
-                DomainSource = srcParts[1],
-                PortSource = int.Parse(srcParts[2]),
-                UseHttpsDestination = dstParts[0].Equals("https", StringComparison.OrdinalIgnoreCase),
-                DomainDestination = dstParts[1],
-                PortDestination = int.Parse(dstParts[2]),
-            };
-
-            // options
-            foreach (var opt in parts.Skip(1))
-            {
-                var kv = opt.Split('=', 2);
-                if (kv.Length != 2) continue;
-                var key = kv[0].Trim().ToLower();
-                var val = kv[1].Trim();
-
-                switch (key)
-                {
-                    case "rewritepath":
-                        {
-                            var rr = val.Split(">", 2);
-                            if (rr.Length != 2)
-                                throw new FormatException($"Rewrite invalide: {val}, attendu pattern=>remplacement");
-
-                            tunnel.PathReplaces.Add(new PathReplaceConfiguration
-                            {
-                                PathRegexMatch = new Regex(rr[0], RegexOptions.Compiled),
-                                PathRegexReplace = rr[1]
-                            });
-                        }
-                        break;
-
-                    case "overwrite":
-                        {
-                            var sep = val.IndexOf('>');
-                            if (sep > 0)
-                                tunnel.OverrideContents[val[..sep]] = val[(sep + 1)..];
-                        }
-                        break;
-                }
-            }
-
-            return tunnel;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -188,11 +141,14 @@ namespace SnapTunnel.Services
 
             var tunnelHosts = _tunnelsConfiguration.Value.Tunnels;
 
-            _logger.LogInformation("Unregistering domains in etc/hosts");
-
-            foreach (var tunnelHost in tunnelHosts)
+            if (tunnelHosts != null)
             {
-                _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                _logger.LogInformation("Unregistering domains in etc/hosts");
+
+                foreach (var tunnelHost in tunnelHosts)
+                {
+                    _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                }
             }
         }
 
@@ -242,6 +198,26 @@ namespace SnapTunnel.Services
                 cert = _certificateService.GetCertificate(certname, storeName, storeLocation);
             }
 
+
+            return true;
+        }
+
+        private bool RemoveRootCertificate(StoreLocation storeLocation, string subject)
+        {
+            var storeName = StoreName.Root;
+
+            if (!_certificateService.IsCertificateInstalled(subject, storeName, storeLocation))
+            {
+                _logger.LogInformation("Certificate is not present in the Store.");
+                return true;
+            }
+
+            var cert = _certificateService.GetCertificate(subject, storeName, storeLocation);
+            if (!_certificateService.UninstallCertificate(cert, storeName, storeLocation))
+            {
+                _logger.LogError("Cannot remove the certificate");
+                return false;
+            }
 
             return true;
         }
