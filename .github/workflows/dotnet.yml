@@ -35,7 +35,7 @@ jobs:
       #run: dotnet publish -c Release -o publish
 
     - name: Archive release
-      run: zip -r app.zip publish/
+      run: 7z a app.zip ./publish/*
 
     - name: Create tag
       run: |
