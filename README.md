@@ -25,13 +25,22 @@ It doesn't emulate infrastructure. It bends it.
 ## ⚙️ Usage
 
 ```bash
+# install root certificate
+snaptunnel -i
+snaptunnel --installrootcert
+
+# uninstall root certificate
+snaptunnel -u
+snaptunnel --uninstallrootcert
+
 # simple redirection
 snaptunnel --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443
+snaptunnel -t "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443
 
 # several tunnels
 snaptunnel 
-    --tunnel:0 "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443|overwrite=/v1/models/Qwen3-32B>Prompts/model.Qwen3-32B.json|overwrite=/v1/models//Qwen3-32B>Prompts/model.Qwen3-32B.json"
-    --tunnel:1 "https:api.anthropic.com:443>http:localhost:8080|overwrite=/v1/organizations>Overwrites/claude.organizations.json"
+    --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443|overwrite=/v1/models/Qwen3-32B>Prompts/model.Qwen3-32B.json|overwrite=/v1/models//Qwen3-32B>Prompts/model.Qwen3-32B.json"
+    --tunnel "https:api.anthropic.com:443>http:localhost:8080|overwrite=/v1/organizations>Overwrites/claude.organizations.json"
 
 ```
 
