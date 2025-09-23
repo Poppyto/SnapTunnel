@@ -1,6 +1,6 @@
-# snaptunnel
+# SnapTunnel
 
-**snaptunnel** — *still not a proxy, but a tunnel*
+**SnapTunnel** — *Still Not A Proxy, but a tunnel*
 
 A stealthy network redirection tool that mimics proxy behavior without actually being one. Built for MITM scenarios, snaptunnel leverages local DNS mapping and transparent interception to reroute traffic with precision and minimal footprint.
 
