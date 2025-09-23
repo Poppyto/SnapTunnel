@@ -31,7 +31,8 @@ jobs:
       run: dotnet test --no-build --verbosity normal
 
     - name: Publish
-      run: dotnet publish -c Release -o publish
+      run: dotnet publish -c Release -r win-x64 -o publish --self-contained false
+      #run: dotnet publish -c Release -o publish
 
     - name: Archive release
       run: zip -r app.zip publish/
