@@ -34,8 +34,8 @@ snaptunnel -u
 snaptunnel --uninstallrootcert
 
 # simple redirection
-snaptunnel --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443
-snaptunnel -t "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443
+snaptunnel --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
+snaptunnel -t "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
 
 # several tunnels
 snaptunnel 
