@@ -65,7 +65,7 @@ namespace SnapTunnel
             var tunnelsOption = new Option<List<TunnelConfiguration>>("-t", "--tunnel")
             {
                 Description = "Create a tunnel",
-                HelpName = "[http|https]:source_host:port>[http|https]:destination_host:port[|rewritepath:/(.*)>/api/openai_compat/$1|overwrite:/index.html>c:/file/index.html]",
+                HelpName = "[http|https]:src_host:port>[http|https]:dest_host:port[|rewritepath:/(.*)>/api/openai_compat/$1|overwrite:/index.html>c:/file/index.html]",
                 CustomParser = result =>
                 {
                     var listTunnelsConfiguration = new List<TunnelConfiguration>();
@@ -121,9 +121,10 @@ namespace SnapTunnel
             ParseResult parseResult = rootCommand.Parse(args);
 
             // Help -h
-            if (parseResult.Action is HelpAction)
+            if (parseResult.Action is HelpAction helpAction)
             {
-                return true;
+                helpAction.Invoke(parseResult);
+                return false;
             }
 
             return !parseResult.Errors.Any();
