@@ -127,6 +127,9 @@ namespace SnapTunnel
                 return false;
             }
 
+            if (0 != parseResult.Invoke())
+                return false;
+
             return !parseResult.Errors.Any();
         }
 

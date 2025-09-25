@@ -48,7 +48,7 @@ namespace SnapTunnel.Configurations
             // options
             foreach (var opt in parts.Skip(1))
             {
-                var kv = opt.Split('=', 2);
+                var kv = opt.Split(':', 2);
                 if (kv.Length != 2) continue;
                 var key = kv[0].Trim().ToLower();
                 var val = kv[1].Trim();

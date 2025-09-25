@@ -41,7 +41,7 @@ namespace SnapTunnel.Services
             StoreLocation storeLocation = StoreLocation.CurrentUser;
 
             var tunnelsConfiguration = _tunnelsConfiguration.Value;
-            if(tunnelsConfiguration == null)
+            if (tunnelsConfiguration == null)
             {
                 _hostApplicationLifetime.StopApplication();
                 return;
@@ -63,9 +63,21 @@ namespace SnapTunnel.Services
                 return;
             }
 
+            if (rootCert == null)
+            {
+                GetRootCertificate(storeLocation, CertificateSubjectRoot, out rootCert);
+            }
+
+            if (rootCert == null)
+            {
+                _logger.LogError("Root certificate is required to create domain certificates. Please install the root certificate first.");
+                _hostApplicationLifetime.StopApplication();
+                return;
+            }
+
             var tunnelHosts = _tunnelsConfiguration.Value.Tunnels;
 
-            if(tunnelHosts == null || !tunnelHosts.Any())
+            if (tunnelHosts == null || !tunnelHosts.Any())
             {
                 _hostApplicationLifetime.StopApplication();
                 return;
@@ -176,6 +188,20 @@ namespace SnapTunnel.Services
             }
 
             return true;
+        }
+
+        private bool GetRootCertificate(StoreLocation storeLocation, string subject, out X509Certificate2? cert)
+        {
+            var storeName = StoreName.Root;
+
+            if (_certificateService.IsCertificateInstalled(subject, storeName, storeLocation))
+            {
+                cert = _certificateService.GetCertificate(subject, storeName, storeLocation);
+                return true;
+            }
+
+            cert = null;
+            return false;
         }
 
         private bool GetOrCreateSignedCertificate(StoreLocation storeLocation, X509Certificate2? rootCert, string certname, IEnumerable<string> domains, out X509Certificate2? cert)
