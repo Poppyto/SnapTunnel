@@ -3,14 +3,23 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace SnapTunnel.Services
 {
     public class EtcHostService : IEtcHostService
     {
         private readonly ILogger<EtcHostService> _logger;
-        private readonly string _hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
+        private string EtcHostsPath
+        {
+            get
+            {
+                if (OperatingSystem.IsLinux())
+                    return "/etc/hosts";
 
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
+            }
+        }
         public EtcHostService(ILogger<EtcHostService> logger)
         {
             _logger = logger;
@@ -20,7 +29,7 @@ namespace SnapTunnel.Services
         {
             try
             {
-                var lines = File.ReadAllLines(_hostsPath).ToList();
+                var lines = File.ReadAllLines(EtcHostsPath).ToList();
                 var entry = $"{ipAddress}\t{domain}";
                 bool updated = false;
 
@@ -35,7 +44,7 @@ namespace SnapTunnel.Services
                 }
 
                 lines.Add(entry);
-                File.WriteAllLines(_hostsPath, lines);
+                File.WriteAllLines(EtcHostsPath, lines);
                 _logger.LogInformation(updated ? $"Updated host entry: {entry}" : $"Added host entry: {entry}");
                 return true;
             }
@@ -50,11 +59,11 @@ namespace SnapTunnel.Services
         {
             try
             {
-                var lines = File.ReadAllLines(_hostsPath).ToList();
+                var lines = File.ReadAllLines(EtcHostsPath).ToList();
                 int removed = lines.RemoveAll(line => line.Trim().EndsWith(domain, StringComparison.OrdinalIgnoreCase));
                 if (removed > 0)
                 {
-                    File.WriteAllLines(_hostsPath, lines);
+                    File.WriteAllLines(EtcHostsPath, lines);
                     _logger.LogInformation($"Removed host entry for {domain}");
                 }
                 else

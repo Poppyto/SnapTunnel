@@ -25,13 +25,13 @@ namespace SnapTunnel.Services
             _httpProtocolService = httpProtocolService;
         }
 
-        public async Task StartTunnelAsync(CreateTunnelHostModel createTunnelHostModel,  CancellationToken cancellationToken = default)
+        public async Task StartTunnelAsync(CreateTunnelHostModel createTunnelHostModel, CancellationToken cancellationToken = default)
         {
             try
             {
                 TcpListener listener = new TcpListener(createTunnelHostModel.ServerAddress, createTunnelHostModel.ServerPort);
                 listener.Start();
-                _logger.LogInformation("Tunnel started and listening on port 443.");
+                _logger.LogInformation("Tunnel started and listening on {server}:{port}.", createTunnelHostModel.ServerAddress, createTunnelHostModel.ServerPort);
 
                 while (true)
                 {
@@ -44,16 +44,17 @@ namespace SnapTunnel.Services
                         {
                             // Set up secure local connection
                             using NetworkStream localNetStream = localClient.GetStream();
-                            using SslStream sslLocalStream = new SslStream(localNetStream, false);
 
                             var localStreamTunnel = new StreamTunnel
                             {
                                 TcpClient = localClient,
-                                Stream = sslLocalStream
+                                Stream = localNetStream
                             };
-                            
+
                             if (createTunnelHostModel.UseHttps)
                             {
+                                SslStream sslLocalStream = new SslStream(localNetStream, false);
+                                localStreamTunnel.Stream = sslLocalStream;
                                 X509Certificate2 serverCertificate = createTunnelHostModel.CertificateDomains;
                                 await sslLocalStream.AuthenticateAsServerAsync(
                                     serverCertificate, clientCertificateRequired: false,
