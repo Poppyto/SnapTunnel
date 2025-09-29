@@ -10,6 +10,7 @@ namespace SnapTunnel.Configurations
     {
         public const string SectionName = "TunnelsConfiguration";
 
+        public bool IsAppendDomainToEtcHosts { get; set; }
         public bool IsInstallCertificate { get; set; }
         public bool IsUninstallCertificate { get; set; }
         public IEnumerable<TunnelConfiguration> Tunnels { get; set; }
