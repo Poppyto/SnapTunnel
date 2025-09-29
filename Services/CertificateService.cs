@@ -53,10 +53,11 @@ namespace SnapTunnel.Services
 
             var cert = request.CreateSelfSigned(notBefore, notAfter);
 
-            var signedCert = new X509Certificate2(cert.Export(X509ContentType.Pfx), (string?)null, X509KeyStorageFlags.Exportable)
+            var signedCert = new X509Certificate2(cert.Export(X509ContentType.Pfx), (string?)null, X509KeyStorageFlags.Exportable);
+            if (OperatingSystem.IsWindows())
             {
-                FriendlyName = subjectName // Définit le nom convivial
-            };
+                signedCert.FriendlyName = subjectName;// Définit le nom convivial
+            }
 
             return signedCert;
         }
