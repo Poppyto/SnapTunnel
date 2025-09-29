@@ -50,6 +50,12 @@ namespace SnapTunnel
                 Required = false,
             };
 
+            var hostEtcOption = new Option<bool>("-a", "--addtohosts")
+            {
+                Description = "Append the domain as 127.0.0.1 to file %System32%\\drivers\\etc\\hosts and remove it when the app exits)",
+                Required = false,
+            };
+
             var installRootCertOption = new Option<bool>("-i", "--installrootcert")
             {
                 Description = "Install the root certificate in the current user trusted root certificate authorities (CAs)",
@@ -88,12 +94,14 @@ namespace SnapTunnel
 
             RootCommand rootCommand = new("SnapTunnel - Still Not A Proxy, but a tunnel");
             rootCommand.Options.Add(verbosityOption);
+            rootCommand.Options.Add(hostEtcOption);
             rootCommand.Options.Add(installRootCertOption);
             rootCommand.Options.Add(uninstallRootCertOption);
             rootCommand.Options.Add(tunnelsOption);
 
             rootCommand.SetAction(parseResult =>
             {
+                var isAppendDomainToEtcHosts = parseResult.GetValue(hostEtcOption);
                 var isInstallCertificate = parseResult.GetValue(installRootCertOption);
                 var isUninstallCertificate = parseResult.GetValue(uninstallRootCertOption);
                 var tunnelsConfigurations = parseResult.GetValue(tunnelsOption);
@@ -110,6 +118,7 @@ namespace SnapTunnel
 
                 builder.Services.Configure<TunnelsConfiguration>(options =>
                 {
+                    options.IsAppendDomainToEtcHosts = isAppendDomainToEtcHosts;
                     options.IsInstallCertificate = isInstallCertificate;
                     options.IsUninstallCertificate = isUninstallCertificate;
                     options.Tunnels = tunnelsConfigurations;

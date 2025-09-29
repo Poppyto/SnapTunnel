@@ -46,7 +46,7 @@ namespace SnapTunnel.Services
                 _hostApplicationLifetime.StopApplication();
                 return;
             }
-
+                        
             var isInstallRootCert = tunnelsConfiguration.IsInstallCertificate;
             var isUninstallRootCert = tunnelsConfiguration.IsUninstallCertificate;
 
@@ -91,18 +91,27 @@ namespace SnapTunnel.Services
                 return;
             }
 
+            var isAppendDomainToEtcHosts = tunnelsConfiguration.IsAppendDomainToEtcHosts;
+
             foreach (var tunnelHost in tunnelHosts)
             {
-                _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                if (isAppendDomainToEtcHosts)
+                {
+                    _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                }
+
                 var ipHostEntry = await Dns.GetHostEntryAsync(tunnelHost.DomainDestination);
                 tunnelHost.IpDestination = ipHostEntry;
 
-                if (!_etcHostService.AddOrUpdateHostEntry("127.0.0.1", tunnelHost.DomainSource))
+                if (isAppendDomainToEtcHosts)
                 {
-                    _logger.LogError("Failed to add or update hosts file entry.");
+                    if (!_etcHostService.AddOrUpdateHostEntry("127.0.0.1", tunnelHost.DomainSource))
+                    {
+                        _logger.LogError("Failed to add or update hosts file entry.");
 
-                    _hostApplicationLifetime.StopApplication();
-                    return;
+                        _hostApplicationLifetime.StopApplication();
+                        return;
+                    }
                 }
             }
 
@@ -151,15 +160,23 @@ namespace SnapTunnel.Services
         {
             _logger.LogInformation("Stop Application");
 
-            var tunnelHosts = _tunnelsConfiguration.Value.Tunnels;
+            var tunnelsConfiguration = _tunnelsConfiguration.Value;
 
-            if (tunnelHosts != null)
-            {
-                _logger.LogInformation("Unregistering domains in etc/hosts");
 
-                foreach (var tunnelHost in tunnelHosts)
+            var isAppendDomainToEtcHosts = tunnelsConfiguration.IsAppendDomainToEtcHosts;
+
+            if (isAppendDomainToEtcHosts)
+            {            
+                var tunnelHosts = tunnelsConfiguration.Tunnels;
+
+                if (tunnelHosts != null)
                 {
-                    _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                    _logger.LogInformation("Unregistering domains in etc/hosts");
+
+                    foreach (var tunnelHost in tunnelHosts)
+                    {
+                        _etcHostService.RemoveHostEntry(tunnelHost.DomainSource);
+                    }
                 }
             }
         }
