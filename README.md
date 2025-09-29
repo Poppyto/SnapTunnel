@@ -22,6 +22,36 @@ It doesn't emulate infrastructure. It bends it.
 
 ---
 
+## CLI
+
+```
+Description:
+  SnapTunnel - Still Not A Proxy, but a tunnel
+
+Usage:
+  SnapTunnel [options]
+
+Options:
+  -v, --verbosity <0-6>                                       Log verbosity (0: Trace, 1: Debug, 
+                                                              2: Information, 3: Warning, 4: Error, 
+                                                              5: Critical, 6: None)
+  -a, --addtohosts                                            Append the domains as 127.0.0.1 into
+                                                              %System32%\drivers\etc\hosts and remove
+                                                              them when the app exits)
+  -i, --installrootcert                                       Install the root certificate in 
+                                                              the current user trusted
+                                                              root certificate authorities (CAs)
+  -u, --uninstallrootcert                                     Uninstall the root certificate from 
+                                                              the current user trusted root certificate 
+                                                              authorities (CAs)
+  -t, --tunnel                                                Create a tunnel
+                                                              <[http|https]:src_host:port>[http|https]:dest_host:port[|r
+                                                              ewritepath:/(.*)>/api/openai_compat/$1|overwrite:/index.ht
+                                                              ml>c:/file/index.html]>
+  -?, -h, --help                                              Show help and usage information
+  --version                                                   Show version information
+```
+
 ## ⚙️ Usage
 
 ```bash
@@ -33,9 +63,9 @@ snaptunnel --installrootcert
 snaptunnel -u
 snaptunnel --uninstallrootcert
 
-# simple redirection
-snaptunnel --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
-snaptunnel -t "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
+# simple redirection with adding domains to etc/host file
+snaptunnel --addtohosts --tunnel "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
+snaptunnel -a -t "https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443"
 
 # several tunnels
 snaptunnel 

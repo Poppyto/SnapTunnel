@@ -52,7 +52,7 @@ namespace SnapTunnel
 
             var hostEtcOption = new Option<bool>("-a", "--addtohosts")
             {
-                Description = "Append the domain as 127.0.0.1 to file %System32%\\drivers\\etc\\hosts and remove it when the app exits)",
+                Description = "Append the domains as 127.0.0.1 into %System32%\\drivers\\etc\\hosts and remove them when the app exits)",
                 Required = false,
             };
 

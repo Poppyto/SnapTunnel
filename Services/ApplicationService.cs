@@ -46,12 +46,14 @@ namespace SnapTunnel.Services
                 _hostApplicationLifetime.StopApplication();
                 return;
             }
-                        
+
             var isInstallRootCert = tunnelsConfiguration.IsInstallCertificate;
             var isUninstallRootCert = tunnelsConfiguration.IsUninstallCertificate;
 
-            if (isUninstallRootCert && !RemoveRootCertificate(storeLocation, CertificateSubjectRoot))
+            if (isUninstallRootCert)
             {
+                RemoveRootCertificate(storeLocation, CertificateSubjectRoot);
+
                 _hostApplicationLifetime.StopApplication();
                 return;
             }
@@ -166,7 +168,7 @@ namespace SnapTunnel.Services
             var isAppendDomainToEtcHosts = tunnelsConfiguration.IsAppendDomainToEtcHosts;
 
             if (isAppendDomainToEtcHosts)
-            {            
+            {
                 var tunnelHosts = tunnelsConfiguration.Tunnels;
 
                 if (tunnelHosts != null)
@@ -232,7 +234,7 @@ namespace SnapTunnel.Services
             {
                 cert = _certificateService.CreateSignedCertificate(rootCert, certname, domains);
 
-                _logger.LogInformation("certificate created and installed in the Store.");
+                _logger.LogInformation("certificate created.");
             }
             else
             {
@@ -240,7 +242,6 @@ namespace SnapTunnel.Services
 
                 cert = _certificateService.GetCertificate(certname, storeName, storeLocation);
             }
-
 
             return true;
         }
