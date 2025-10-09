@@ -3,6 +3,7 @@ using SnapTunnel.Configurations;
 using SnapTunnel.Interfaces;
 using SnapTunnel.Models;
 using System.Buffers;
+using System.Net.Mime;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -18,11 +19,12 @@ namespace SnapTunnel.Services
 
         private readonly ILogger<TunnelService> _logger;
         private readonly IHttpProtocolService _httpProtocolService;
-
-        public TunnelService(ILogger<TunnelService> logger, IHttpProtocolService httpProtocolService)
+        private readonly IMimeService _mimeService;
+        public TunnelService(ILogger<TunnelService> logger, IHttpProtocolService httpProtocolService, IMimeService mimeService)
         {
             _logger = logger;
             _httpProtocolService = httpProtocolService;
+            _mimeService = mimeService;
         }
 
         public async Task StartTunnelAsync(CreateTunnelHostModel createTunnelHostModel, CancellationToken cancellationToken = default)
@@ -295,7 +297,7 @@ namespace SnapTunnel.Services
 
         private async Task SendFileHttpResponseAsync(StreamTunnel input, HttpPathMethodModel httpPathMethodModel, string filePath, FileInfo fileInfo, CancellationToken cancellationToken)
         {
-            var contentType = "application/octet-stream";
+            var contentType = _mimeService.GetMimeForExtension(fileInfo.Extension);
 
             var httpVersionAndStatus = $"""
 HTTP/1.1 200 OK

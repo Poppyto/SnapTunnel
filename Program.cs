@@ -28,7 +28,8 @@ namespace SnapTunnel
             builder.Services.AddScoped<ITunnelService, TunnelService>();
             builder.Services.AddScoped<IEtcHostService, EtcHostService>();
             builder.Services.AddScoped<IHttpProtocolService, HttpProtocolService>();
-
+            builder.Services.AddScoped<IMimeService, MimeService>();
+            
 
             builder.Services.AddHostedService<ApplicationService>();
             var host = builder.Build();
