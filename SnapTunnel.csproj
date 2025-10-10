@@ -8,14 +8,6 @@
 		<PublishAot>true</PublishAot>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
-
-
-		<BaseOutputPath>C:\snaptunnel\</BaseOutputPath>
-		<OutputPath>C:\snaptunnel\</OutputPath>
-		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-
-
 	</PropertyGroup>
 
 	<ItemGroup>
