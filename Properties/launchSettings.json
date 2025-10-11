@@ -2,8 +2,7 @@
   "profiles": {
     "SnapTunnel": {
       "commandName": "Project",
-      "commandLineArgs": "-i -a -t \"https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443|overwrite:/v1/models/Qwen3-32B>Models/model.Qwen3-32B.json\"",
-      "workingDirectory": "C:\\SnapTunnel"
+      "commandLineArgs": "-i -a -t \"https:api.openai.com:443>https:oai.endpoints.kepler.ai.cloud.ovh.net:443|overwrite:/v1/models/Qwen3-32B>Models/model.Qwen3-32B.json\""
     },
     "WSL": {
       "commandName": "WSL2",
